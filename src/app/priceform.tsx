@@ -10,24 +10,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
-  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withDelay,
   withRepeat,
-  withSequence,
   Easing,
   interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import API_BASE_URL from "../components/APiConfig";
 
-const COLORS = {
+const C = {
   bg: "#0A0A0A",
   surface: "rgba(255,255,255,0.03)",
   surfaceInput: "rgba(255,255,255,0.04)",
@@ -41,36 +39,30 @@ const COLORS = {
   error: "#F87171",
   success: "#4ADE80",
   whatsapp: "#25D366",
-  whatsappDark: "#128C4E",
 };
 
-const WA_NUMBER = "917022852377";
-const WA_LINK = `https://wa.me/${WA_NUMBER}`;
+const WA_LINK = "https://wa.me/917022852377";
 
-const SERVICE_OPTIONS = [
-  { id: "web", label: "Web Development" },
-  { id: "android", label: "Android Application" },
-  { id: "ios", label: "iOS Application" },
-  { id: "hosting", label: "Hosting" },
-  { id: "ai", label: "AI Integration (Chatbots)" },
-  { id: "it", label: "IT Consultancy" },
-  { id: "learn", label: "Learn Coding" },
-];
-
-/* ─────────────────────────────────────────────
-   MAIN SCREEN
-   ───────────────────────────────────────────── */
-export default function Contact() {
+export default function PriceForm() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
+
+  const params = useLocalSearchParams<{
+    selectedPlan: string;
+    planName: string;
+    planPrice: string;
+    planType: string;
+  }>();
+
+  const { selectedPlan, planName, planPrice, planType } = params;
 
   const [form, setForm] = useState({
     name: "",
     phone: "",
     email: "",
-    other: "",
+    specialQuote: "",
   });
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(false);
@@ -79,13 +71,15 @@ export default function Contact() {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, []);
 
+  useEffect(() => {
+    if (!selectedPlan && !planName) {
+      router.replace("/" as any);
+    }
+  }, [selectedPlan, planName, router]);
+
   const update = (field: string, val: string) => {
     setForm((f) => ({ ...f, [field]: val }));
     if (errors[field]) setErrors((e) => ({ ...e, [field]: "" }));
-  };
-
-  const toggleCheck = (id: string) => {
-    setChecks((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const validate = () => {
@@ -108,25 +102,26 @@ export default function Contact() {
 
     setLoading(true);
     try {
-      const selectedServices = Object.keys(checks).filter((k) => checks[k]);
-
-      const response = await fetch(`${API_BASE_URL}/api/contact`, {
+      const response = await fetch(`${API_BASE_URL}/api/quote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name,
           phone: form.phone,
           email: form.email || null,
-          other: form.other || null,
-          services: selectedServices,
+          specialQuote: form.specialQuote || null,
+          selectedPlan,
+          planName,
+          planPrice,
+          planType,
+          services: [planType, planName].filter(Boolean),
         }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setForm({ name: "", phone: "", email: "", other: "" });
-        setChecks({});
+        setForm({ name: "", phone: "", email: "", specialQuote: "" });
         setErrors({});
         setToast(true);
         setTimeout(() => setToast(false), 4000);
@@ -134,49 +129,79 @@ export default function Contact() {
         alert(data.message || "Something went wrong. Please try again.");
       }
     } catch (err) {
-      console.error("Error submitting form:", err);
+      console.error("Error submitting quote request:", err);
       alert("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const getPlanTypeLabel = () => {
+    if (planType === "website") return "🌐 Website Development";
+    if (planType === "android") return "📱 Android App Development";
+    if (planType === "custom") return "⚙️ Custom Solution";
+    return "💡 Development Service";
+  };
+
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: COLORS.bg }}
+      style={{ flex: 1, backgroundColor: C.bg }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
     >
+      {/* Header bar */}
+      <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="arrow-back" size={14} color={C.muted} />
+          <Text style={styles.backBtnText}>Back</Text>
+        </Pressable>
+      </View>
+
       <ScrollView
         ref={scrollRef}
-        style={styles.root}
+        style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingBottom: insets.bottom + 140,
           paddingHorizontal: 20,
-          paddingTop: 30,
+          paddingTop: 20,
+          paddingBottom: insets.bottom + 160,
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Card */}
+        {/* Selected Plan Card */}
         <Reveal delay={0}>
-          <View style={styles.card}>
-            <View style={styles.cardGlow} pointerEvents="none" />
+          <View style={styles.planCard}>
+            <View style={styles.planBadge}>
+              <Text style={styles.planBadgeText}>📋 SELECTED PLAN</Text>
+            </View>
+            <Text style={styles.planName}>{planName || "Custom Plan"}</Text>
+            <Text style={styles.planPrice}>{planPrice || "Custom Pricing"}</Text>
+            <View style={styles.planTypeRow}>
+              <View style={styles.planTypeDot} />
+              <Text style={styles.planTypeText}>{getPlanTypeLabel()}</Text>
+            </View>
+          </View>
+        </Reveal>
 
-            <Text style={styles.title}>
-              Contact <Text style={styles.titleAccent}>Us</Text>
+        {/* Form Card */}
+        <Reveal delay={100}>
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>
+              Request a <Text style={styles.formTitleAccent}>Quote</Text>
             </Text>
-            <Text style={styles.subtitle}>
-              Tell us about your project and we'll get back to you as soon as
-              possible.
+            <Text style={styles.formSubtitle}>
+              Fill in your details and we'll get back to you with a personalized quote for your project.
             </Text>
 
             {/* Name */}
             <FormField
-              label="Name"
+              label="Full Name"
               value={form.name}
               onChangeText={(v) => update("name", v)}
-              placeholder="Your full name"
+              placeholder="Enter your full name"
               error={errors.name}
             />
 
@@ -185,14 +210,14 @@ export default function Contact() {
               label="Phone Number"
               value={form.phone}
               onChangeText={(v) => update("phone", v)}
-              placeholder="Enter your 10 digit phone number"
+              placeholder="Enter your 10-digit phone number"
               keyboardType="phone-pad"
               error={errors.phone}
             />
 
             {/* Email */}
             <FormField
-              label="Email"
+              label="Email Address"
               optional
               value={form.email}
               onChangeText={(v) => update("email", v)}
@@ -202,32 +227,16 @@ export default function Contact() {
               error={errors.email}
             />
 
-            <View style={styles.divider} />
-
-            {/* Services */}
-            <Text style={styles.groupTitle}>I'M INTERESTED IN</Text>
-            <View style={styles.checksWrap}>
-              {SERVICE_OPTIONS.map((opt, i) => (
-                <CheckOption
-                  key={opt.id}
-                  label={opt.label}
-                  checked={!!checks[opt.id]}
-                  onPress={() => toggleCheck(opt.id)}
-                  delay={i * 50}
-                />
-              ))}
-            </View>
-
-            {/* Other reason */}
-            <View style={{ marginTop: 20 }}>
+            {/* Special Requirements */}
+            <View style={{ marginBottom: 20 }}>
               <Text style={styles.label}>
-                OTHER REASON
+                SPECIAL REQUIREMENTS
                 <Text style={styles.labelOptional}> (optional)</Text>
               </Text>
               <TextInput
-                value={form.other}
-                onChangeText={(v) => update("other", v)}
-                placeholder="Tell us anything else you have in mind…"
+                value={form.specialQuote}
+                onChangeText={(v) => update("specialQuote", v)}
+                placeholder="Tell us any specific requirements, features, or questions..."
                 placeholderTextColor="rgba(161,161,170,0.45)"
                 multiline
                 style={[styles.input, styles.textarea]}
@@ -242,21 +251,18 @@ export default function Contact() {
               style={({ pressed }) => [
                 styles.submitBtn,
                 loading && { opacity: 0.6 },
-                pressed && !loading && {
-                  transform: [{ translateY: -2 }],
-                  shadowOpacity: 0.5,
-                },
+                pressed && !loading && { transform: [{ translateY: -2 }] },
               ]}
             >
               {loading ? (
                 <>
                   <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.submitText}>Sending…</Text>
+                  <Text style={styles.submitText}>Sending...</Text>
                 </>
               ) : (
                 <>
                   <Ionicons name="paper-plane-outline" size={16} color="#fff" />
-                  <Text style={styles.submitText}>Send Message</Text>
+                  <Text style={styles.submitText}>Request Quote</Text>
                 </>
               )}
             </Pressable>
@@ -264,17 +270,14 @@ export default function Contact() {
         </Reveal>
       </ScrollView>
 
-      {/* WhatsApp Floating Button */}
       <WhatsAppFAB />
-
-      {/* Toast */}
       <Toast visible={toast} />
     </KeyboardAvoidingView>
   );
 }
 
 /* ─────────────────────────────────────────────
-   REVEAL WRAPPER
+   REVEAL
    ───────────────────────────────────────────── */
 function Reveal({
   children,
@@ -287,13 +290,16 @@ function Reveal({
   useEffect(() => {
     p.value = withDelay(
       delay,
-      withTiming(1, { duration: 600, easing: Easing.bezier(0.22, 1, 0.36, 1) })
+      withTiming(1, {
+        duration: 550,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+      })
     );
   }, [delay, p]);
 
   const style = useAnimatedStyle(() => ({
     opacity: p.value,
-    transform: [{ translateY: interpolate(p.value, [0, 1], [28, 0]) }],
+    transform: [{ translateY: interpolate(p.value, [0, 1], [24, 0]) }],
   }));
 
   return <Animated.View style={style}>{children}</Animated.View>;
@@ -324,7 +330,7 @@ function FormField({
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.field}>
+    <View style={{ marginBottom: 20 }}>
       <Text style={styles.label}>
         {label.toUpperCase()}
         {optional && <Text style={styles.labelOptional}> (optional)</Text>}
@@ -340,14 +346,24 @@ function FormField({
         autoCapitalize={autoCapitalize ?? "sentences"}
         style={[
           styles.input,
-          focused && styles.inputFocused,
-          !!error && styles.inputError,
+          focused && {
+            borderColor: C.borderActive,
+            backgroundColor: "rgba(59,130,246,0.04)",
+          },
+          !!error && { borderColor: "rgba(248,113,113,0.5)" },
         ]}
       />
       {!!error && (
-        <View style={styles.errorRow}>
-          <Ionicons name="warning-outline" size={12} color={COLORS.error} />
-          <Text style={styles.errorText}>{error}</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            marginTop: 6,
+          }}
+        >
+          <Ionicons name="warning-outline" size={12} color={C.error} />
+          <Text style={{ color: C.error, fontSize: 12 }}>{error}</Text>
         </View>
       )}
     </View>
@@ -355,75 +371,13 @@ function FormField({
 }
 
 /* ─────────────────────────────────────────────
-   CHECKBOX OPTION
-   ───────────────────────────────────────────── */
-function CheckOption({
-  label,
-  checked,
-  onPress,
-  delay,
-}: {
-  label: string;
-  checked: boolean;
-  onPress: () => void;
-  delay: number;
-}) {
-  const p = useSharedValue(0);
-  const press = useSharedValue(0);
-
-  useEffect(() => {
-    p.value = withDelay(
-      delay,
-      withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) })
-    );
-  }, [delay, p]);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: p.value,
-    transform: [
-      { translateY: interpolate(p.value, [0, 1], [12, 0]) },
-      { scale: interpolate(press.value, [0, 1], [1, 0.97]) },
-    ],
-    borderColor: checked ? COLORS.borderActive : COLORS.border,
-    backgroundColor: checked ? COLORS.accentDim : "rgba(255,255,255,0.02)",
-  }));
-
-  const boxStyle = useAnimatedStyle(() => ({
-    backgroundColor: checked ? COLORS.accent : "transparent",
-    borderColor: checked ? COLORS.accent : COLORS.border,
-  }));
-
-  return (
-    <Animated.View style={[styles.checkWrap, style]}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => (press.value = withTiming(1, { duration: 100 }))}
-        onPressOut={() => (press.value = withTiming(0, { duration: 180 }))}
-        style={styles.checkInner}
-      >
-        <Animated.View style={[styles.checkBox, boxStyle]}>
-          {checked && <Ionicons name="checkmark" size={12} color="#fff" />}
-        </Animated.View>
-        <Text
-          style={[styles.checkLabel, checked && { color: COLORS.text }]}
-          numberOfLines={1}
-        >
-          {label}
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   WHATSAPP FLOATING BUTTON
+   WHATSAPP FAB
    ───────────────────────────────────────────── */
 function WhatsAppFAB() {
   const insets = useSafeAreaInsets();
   const ring1 = useSharedValue(0);
   const ring2 = useSharedValue(0);
   const bounce = useSharedValue(0);
-  const pressed = useSharedValue(0);
 
   useEffect(() => {
     ring1.value = withRepeat(
@@ -447,7 +401,7 @@ function WhatsAppFAB() {
         true
       )
     );
-  }, [ring1, ring2, bounce]);
+  }, []);
 
   const r1 = useAnimatedStyle(() => ({
     transform: [{ scale: interpolate(ring1.value, [0, 1], [1, 1.55]) }],
@@ -459,27 +413,23 @@ function WhatsAppFAB() {
   }));
   const wrapStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: interpolate(bounce.value, [0, 0.3, 0.6, 1], [0, -6, -2, 0]) },
-      { scale: interpolate(pressed.value, [0, 1], [1, 0.92]) },
+      {
+        translateY: interpolate(
+          bounce.value,
+          [0, 0.3, 0.6, 1],
+          [0, -6, -2, 0]
+        ),
+      },
     ],
   }));
 
-  const openWA = () => Linking.openURL(WA_LINK).catch(() => {});
-
   return (
     <Animated.View
-      style={[
-        styles.fabWrap,
-        { bottom: insets.bottom + 90 },
-        wrapStyle,
-      ]}
+      style={[styles.fabWrap, { bottom: insets.bottom + 30 }, wrapStyle]}
     >
       <Pressable
-        onPress={openWA}
-        onPressIn={() => (pressed.value = withTiming(1, { duration: 100 }))}
-        onPressOut={() => (pressed.value = withTiming(0, { duration: 200 }))}
+        onPress={() => Linking.openURL(WA_LINK).catch(() => {})}
         style={styles.fabBtn}
-        hitSlop={8}
       >
         <Animated.View style={[styles.fabRing, r1]} pointerEvents="none" />
         <Animated.View style={[styles.fabRing, r2]} pointerEvents="none" />
@@ -513,18 +463,14 @@ function Toast({ visible }: { visible: boolean }) {
 
   return (
     <Animated.View
-      style={[
-        styles.toast,
-        { bottom: insets.bottom + 160 },
-        style,
-      ]}
+      style={[styles.toast, { bottom: insets.bottom + 110 }, style]}
       pointerEvents="none"
     >
       <View style={styles.toastIcon}>
-        <Ionicons name="checkmark" size={14} color={COLORS.success} />
+        <Ionicons name="checkmark" size={14} color={C.success} />
       </View>
       <View>
-        <Text style={styles.toastTitle}>Message sent!</Text>
+        <Text style={styles.toastTitle}>Request sent!</Text>
         <Text style={styles.toastSub}>We'll get back to you shortly.</Text>
       </View>
     </Animated.View>
@@ -535,47 +481,89 @@ function Toast({ visible }: { visible: boolean }) {
    STYLES
    ───────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.bg },
-
-  /* Card */
-  card: {
-    backgroundColor: COLORS.surface,
+  /* Header bar */
+  headerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: "rgba(10,10,10,0.95)",
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 24,
-    paddingVertical: 32,
-    paddingHorizontal: 22,
+    borderColor: C.border,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  backBtnText: { color: C.muted, fontSize: 12 },
+
+  /* Selected plan card */
+  planCard: {
+    backgroundColor: "rgba(59,130,246,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,0.25)",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     overflow: "hidden",
   },
-  cardGlow: {
-    position: "absolute",
-    top: -100,
-    left: "10%",
-    right: "10%",
-    height: 200,
-    backgroundColor: "rgba(59,130,246,0.10)",
+  planBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(59,130,246,0.15)",
     borderRadius: 100,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    marginBottom: 12,
   },
-  title: {
-    color: COLORS.text,
-    fontSize: 30,
+  planBadgeText: {
+    color: C.accent,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+  planName: { color: C.text, fontSize: 20, fontWeight: "700", marginBottom: 8 },
+  planPrice: { color: C.accent, fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  planTypeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  planTypeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: C.accent,
+  },
+  planTypeText: { color: C.textSecondary, fontSize: 13 },
+
+  /* Form card */
+  formCard: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 24,
+    padding: 24,
+  },
+  formTitle: {
+    color: C.text,
+    fontSize: 26,
     fontWeight: "800",
-    letterSpacing: -0.8,
-    lineHeight: 36,
+    letterSpacing: -0.6,
     marginBottom: 8,
   },
-  titleAccent: { color: COLORS.accent },
-  subtitle: {
-    color: COLORS.muted,
+  formTitleAccent: { color: C.accent },
+  formSubtitle: {
+    color: C.muted,
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 21,
     marginBottom: 26,
   },
 
-  /* Field */
-  field: { marginBottom: 20 },
   label: {
-    color: COLORS.textSecondary,
+    color: C.textSecondary,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1,
@@ -585,131 +573,45 @@ const styles = StyleSheet.create({
     color: "rgba(161,161,170,0.55)",
     fontSize: 10,
     fontWeight: "500",
-    letterSpacing: 0.2,
   },
   input: {
-    backgroundColor: COLORS.surfaceInput,
+    backgroundColor: C.surfaceInput,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: C.border,
     borderRadius: 12,
     paddingVertical: 13,
     paddingHorizontal: 16,
-    color: COLORS.text,
+    color: C.text,
     fontSize: 14,
   },
-  inputFocused: {
-    borderColor: COLORS.borderActive,
-    backgroundColor: "rgba(59,130,246,0.04)",
-  },
-  inputError: {
-    borderColor: "rgba(248,113,113,0.5)",
-  },
-  textarea: {
-    minHeight: 100,
-    paddingTop: 14,
-  },
-  errorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 6,
-  },
-  errorText: {
-    color: COLORS.error,
-    fontSize: 12,
-  },
+  textarea: { minHeight: 100, paddingTop: 14 },
 
-  /* Divider & group */
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 22,
-  },
-  groupTitle: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1,
-    marginBottom: 14,
-  },
-
-  /* Checks */
-  checksWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  checkWrap: {
-    minWidth: "47%",
-    flexGrow: 1,
-    flexBasis: "47%",
-    borderRadius: 10,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  checkInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 13,
-  },
-  checkBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontWeight: "500",
-    flex: 1,
-  },
-
-  /* Submit */
   submitBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: COLORS.accent,
+    backgroundColor: C.accent,
     borderRadius: 12,
     paddingVertical: 15,
-    paddingHorizontal: 24,
-    marginTop: 26,
-    shadowColor: COLORS.accent,
+    marginTop: 10,
+    shadowColor: C.accent,
     shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
-  submitText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
+  submitText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
-  /* WhatsApp FAB */
-  fabWrap: {
-    position: "absolute",
-    right: 20,
-    zIndex: 100,
-  },
+  /* FAB */
+  fabWrap: { position: "absolute", right: 20, zIndex: 100 },
   fabBtn: {
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: COLORS.whatsapp,
+    backgroundColor: C.whatsapp,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: COLORS.whatsapp,
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
   fabRing: {
@@ -717,13 +619,12 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: COLORS.whatsapp,
+    backgroundColor: C.whatsapp,
   },
 
   /* Toast */
   toast: {
     position: "absolute",
-    alignSelf: "center",
     left: 20,
     right: 20,
     flexDirection: "row",
@@ -735,10 +636,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
     elevation: 10,
   },
   toastIcon: {
@@ -749,14 +646,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  toastTitle: {
-    color: COLORS.success,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  toastSub: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
+  toastTitle: { color: C.success, fontSize: 14, fontWeight: "700" },
+  toastSub: { color: C.textSecondary, fontSize: 12, marginTop: 2 },
 });
